@@ -1,6 +1,7 @@
 package main
 
 import (
+	"go-chat/trace"
 	"log"
 	"net/http"
 
@@ -16,6 +17,8 @@ type room struct {
 	leave chan *client
 	// all active clients is added to clients field
 	clients map[*client]bool
+	// log is added to tracer field
+	tracer trace.Tracer
 }
 
 func newRoom() *room {
@@ -33,18 +36,23 @@ func (r *room) run() {
 		select {
 		case client := <-r.join:
 			r.clients[client] = true
+			r.tracer.Trace("新しいクライアントが参加しました")
 		case client := <-r.leave:
 			delete(r.clients, client)
 			close(client.send)
+			r.tracer.Trace("新しいクライアントが退室しました")
 		case msg := <-r.forward:
+			r.tracer.Trace("メッセージを受信しました：", string(msg))
 			// send massage for all clients
 			for client := range r.clients {
 				select {
 				case client.send <- msg:
+					r.tracer.Trace(" -- クライアントに送信されました")
 				default:
 					// if a failure occurs
 					delete(r.clients, client)
 					close(client.send)
+					r.tracer.Trace(" -- 送信に失敗しました．クライアントをクリーンアップします．")
 				}
 			}
 		}
